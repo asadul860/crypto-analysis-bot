@@ -113,6 +113,18 @@ def get_analysis(message):
     except Exception as e:
         bot.send_message(message.chat.id, "❌ ডাটা প্রসেস করতে সমস্যা হয়েছে। দয়া করে কিছুক্ষণ পর চেষ্টা করুন।")
 
+# ফাইলের একদম নিচে এটি বসান
 if __name__ == "__main__":
-    Thread(target=run_web).start()
-    bot.infinity_polling()
+    # ওয়েব সার্ভারটি আলাদাভাবে চালু করবে (Render এর জন্য)
+    t = Thread(target=run_web)
+    t.daemon = True  # মেইন প্রোগ্রাম বন্ধ হলে এটিও বন্ধ হবে
+    t.start()
+    
+    print("Bot is starting...")
+    
+    # টেলিগ্রাম বট চালু করবে এবং কনফ্লিক্ট এরর এড়াতে সাহায্য করবে
+    try:
+        bot.infinity_polling(skip_pending=True)
+    except Exception as e:
+        print(f"Polling error: {e}")
+
