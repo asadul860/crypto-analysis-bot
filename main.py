@@ -19,8 +19,10 @@ app = Flask('')
 def home(): return "Pro Trader Bot is Active!"
 
 def run_web():
+    # Render নিজে থেকে যে পোর্ট অ্যাসাইন করে সেটা আগে চেক করবে, না পেলে ১০০০০ নিবে
     port = int(os.environ.get("PORT", 10000))
     app.run(host='0.0.0.0', port=port)
+
 
 # ৩. ডাটা ফেচ ফাংশন
 def fetch_market_data(symbol):
