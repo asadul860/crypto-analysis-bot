@@ -1,0 +1,6 @@
+services:
+  - type: worker
+    name: crypto-analysis-bot
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python main.py
