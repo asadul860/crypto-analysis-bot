@@ -3,36 +3,46 @@ import pandas as pd
 import ta
 import telebot
 import os
+import time
 from threading import Thread
 from flask import Flask
 
-# ১. টেলিগ্রাম বট টোকেন
+# ১. টেলিগ্রাম বট টোকেন (এখানে আপনার আসল টোকেন বসান)
 API_TOKEN = '8537303678:AAFVsbISMZZkfCMlqcJ9EQScz5OjbIwrXvs'
 bot = telebot.TeleBot(API_TOKEN)
 
 # ২. ওয়েব সার্ভার (Render এর জন্য)
 app = Flask('')
+
 @app.route('/')
-def home(): return "Ultra-Analysis Bot is Active!"
+def home():
+    return "Ultra-Analysis Bot is Active!"
 
 def run_web():
-    port = int(os.environ.get("PORT", 8080))
+    port = int(os.environ.get("PORT", 10000))
     app.run(host='0.0.0.0', port=port)
 
-# ৩. ডাটা ফেচ ফাংশন
+# ৩. ডাটা ফেচ করার ফাংশন
 def fetch_market_data(symbol):
-    if "/" not in symbol: symbol = f"{symbol.upper()}/USDT"
-    else: symbol = symbol.upper()
+    # সিম্বল ফরম্যাট ঠিক করা
+    if "/" not in symbol:
+        symbol = f"{symbol.upper()}/USDT"
+    else:
+        symbol = symbol.upper()
+
     try:
+        # প্রথমে বিন্যান্স থেকে ট্রাই করবে
         exchange = ccxt.binance({'enableRateLimit': True})
         bars = exchange.fetch_ohlcv(symbol, timeframe='1h', limit=300)
     except:
+        # বিন্যান্স না পারলে কু-কয়েন থেকে ট্রাই করবে
         exchange = ccxt.kucoin({'enableRateLimit': True})
         bars = exchange.fetch_ohlcv(symbol, timeframe='1h', limit=300)
+    
     df = pd.DataFrame(bars, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
     return df, symbol
 
-# ৪. আল্ট্রা এনালাইসিস লজিক (BB + RSI + MACD + EMA + ADX + Stochastic)
+# ৪. পাওয়ারফুল এনালাইসিস লজিক
 def analyze_market(df):
     # Bollinger Bands
     bb = ta.volatility.BollingerBands(close=df["close"], window=20, window_dev=2)
@@ -45,8 +55,9 @@ def analyze_market(df):
     macd = ta.trend.MACD(close=df["close"])
     df['macd_line'], df['macd_signal'] = macd.macd(), macd.macd_signal()
     
-    # EMA
+    # EMA (50 and 200)
     df['ema_50'] = ta.trend.ema_indicator(df["close"], window=50)
+    df['ema_200'] = ta.trend.ema_indicator(df["close"], window=200)
     
     # ADX (Trend Strength)
     adx_ind = ta.trend.ADXIndicator(df['high'], df['low'], df['close'], window=14)
@@ -60,41 +71,49 @@ def analyze_market(df):
     close, rsi, adx = last['close'], last['rsi'], last['adx']
     bb_high, bb_low = last['bb_high'], last['bb_low']
     stoch_k = last['stoch_k']
-    ema_50 = last['ema_50']
+    ema_50, ema_200 = last['ema_50'], last['ema_200']
+    macd_line, macd_signal = last['macd_line'], last['macd_signal']
 
     # --- সুপার সিগন্যাল লজিক ---
     if close <= bb_low and rsi < 30 and stoch_k < 20:
         strength = "💎 ULTRA BUY (Extreme Oversold)"
-        reason = "বোলিঙ্গার ব্যান্ড, RSI এবং Stochastic সবগুলোই মার্কেটকে অনেক নিচে দেখাচ্ছে। এখান থেকে বাউন্স করার সম্ভাবনা অনেক বেশি।"
+        reason = "প্রাইস লোয়ার ব্যান্ডে, RSI এবং Stochastic ওভারসোল্ড। বাউন্স করার প্রবল সম্ভাবনা!"
     
     elif close >= bb_high and rsi > 70 and stoch_k > 80:
         strength = "🚨 ULTRA SELL (Extreme Overbought)"
-        reason = "মার্কেট অনেক বেশি উপরে উঠে গেছে, প্রফিট বুক করার সময় হয়েছে।"
+        reason = "মার্কেট অনেক বেশি উপরে। প্রফিট বুক করার সময় হয়েছে।"
         
     elif adx > 25 and close > ema_50:
         strength = "🚀 STRONG BULLISH TREND"
-        reason = f"মার্কেট একটি শক্তিশালী উর্ধমুখী ট্রেন্ডে আছে (ADX: {round(adx, 2)}) এবং EMA 50 এর উপরে সাপোর্ট নিচ্ছে।"
+        reason = f"শক্তিশালী উর্ধমুখী ট্রেন্ড (ADX: {round(adx, 1)}) এবং EMA 50 এর উপরে সাপোর্ট।"
         
     elif adx > 25 and close < ema_50:
         strength = "📉 STRONG BEARISH TREND"
-        reason = "মার্কেট শক্তিশালী নিম্নমুখী ট্রেন্ডে আছে। সেল করা নিরাপদ হতে পারে।"
+        reason = "শক্তিশালী নিম্নমুখী ট্রেন্ড। সেল সাইডে থাকা নিরাপদ।"
         
+    elif close > ema_200:
+        strength = "📈 BULLISH BIAS"
+        reason = "দাম EMA 200 এর উপরে, লং-টার্ম ট্রেন্ড এখনো পজিটিভ।"
     else:
         strength = "⚖️ SIDEWAYS / NEUTRAL"
-        reason = "মার্কেট বর্তমানে একটি নির্দিষ্ট রেঞ্জে ঘুরপাক খাচ্ছে, বড় কোনো মুভমেন্টের অপেক্ষায় থাকুন।"
+        reason = "মার্কেট বর্তমানে রেঞ্জিং মুডে আছে। বড় মুভমেন্টের অপেক্ষা করুন।"
 
     return {
         "price": close, "rsi": round(rsi, 2), "adx": round(adx, 2),
-        "strength": strength, "reason": reason
+        "ema_50": round(ema_50, 2), "strength": strength, "reason": reason
     }
 
 # ৫. কমান্ড হ্যান্ডলার
+@bot.message_handler(commands=['start'])
+def send_welcome(message):
+    bot.reply_to(message, "স্বাগতম! এনালাইসিস পেতে লিখুন:\n`/analyze btc` বা `/analyze eth` বা `/analyze eur`")
+
 @bot.message_handler(commands=['analyze'])
 def get_analysis(message):
     try:
         args = message.text.split()
         target = args[1] if len(args) > 1 else "BTC"
-        bot.send_message(message.chat.id, f"🔍 {target} এর গভীর এনালাইসিস চলছে...")
+        bot.send_message(message.chat.id, f"🔍 {target} এর প্রো-এনালাইসিস চলছে...")
         
         df, final_symbol = fetch_market_data(target)
         data = analyze_market(df)
@@ -102,29 +121,35 @@ def get_analysis(message):
         msg = (
             f"📊 **{final_symbol} Ultra Analysis**\n"
             f"━━━━━━━━━━━━━━━\n"
-            f"💰 **Price:** {data['price']}\n"
+            f"💰 **Current Price:** {data['price']}\n"
             f"⚡ **RSI:** {data['rsi']}\n"
-            f"📈 **ADX (Trend Strength):** {data['adx']}\n\n"
+            f"📉 **EMA 50:** {data['ema_50']}\n"
+            f"📈 **ADX (Trend):** {data['adx']}\n\n"
             f"🎯 **Final Signal:** {data['strength']}\n"
             f"💡 **Reason:** {data['reason']}\n"
             f"━━━━━━━━━━━━━━━"
         )
         bot.send_message(message.chat.id, msg, parse_mode="Markdown")
     except Exception as e:
-        bot.send_message(message.chat.id, "❌ ডাটা প্রসেস করতে সমস্যা হয়েছে। দয়া করে কিছুক্ষণ পর চেষ্টা করুন।")
+        bot.send_message(message.chat.id, "❌ এরর: পেয়ারটি পাওয়া যায়নি বা ডাটা লোড হয়নি। উদাহরণ: `/analyze sol`")
 
-# ফাইলের একদম নিচে এটি বসান
+# ৬. রান করার অংশ (কনফ্লিক্ট ফিক্স সহ)
 if __name__ == "__main__":
-    # ওয়েব সার্ভারটি আলাদাভাবে চালু করবে (Render এর জন্য)
+    # ওয়েব সার্ভার ব্যাকগ্রাউন্ডে চালু করা
     t = Thread(target=run_web)
-    t.daemon = True  # মেইন প্রোগ্রাম বন্ধ হলে এটিও বন্ধ হবে
+    t.daemon = True
     t.start()
     
-    print("Bot is starting...")
+    # পুরোনো সেশন ক্লিয়ার করার জন্য একটু সময় নেওয়া
+    print("Waiting for old sessions to clear...")
+    time.sleep(2)
     
-    # টেলিগ্রাম বট চালু করবে এবং কনফ্লিক্ট এরর এড়াতে সাহায্য করবে
+    print("Bot is alive and polling...")
+    
     try:
+        # পুরোনো কানেকশন রিমুভ করা
+        bot.remove_webhook()
+        # বট চালু করা
         bot.infinity_polling(skip_pending=True)
     except Exception as e:
-        print(f"Polling error: {e}")
-
+        print(f"Final Polling error: {e}")
