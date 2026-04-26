@@ -25,18 +25,24 @@ def run_web():
     app.run(host='0.0.0.0', port=port)
 
 
-# ৩. ডাটা ফেচ ফাংশন
 def fetch_market_data(symbol):
-    if "/" not in symbol: symbol = f"{symbol.upper()}/USDT"
-    else: symbol = symbol.upper()
+    symbol = symbol.upper()
+    # যদি কেউ শুধু EUR লেখে, তবে তাকে EUR/USDT তে রূপান্তর করবে
+    if "/" not in symbol:
+        symbol = f"{symbol}/USDT"
+    
+    # বিন্যান্স সাধারণত ফরেক্স পেয়ার সাপোর্ট করে
+    exchange = ccxt.binance({'enableRateLimit': True})
+    
     try:
-        exchange = ccxt.binance({'enableRateLimit': True})
         bars = exchange.fetch_ohlcv(symbol, timeframe='1h', limit=300)
-    except:
-        exchange = ccxt.kucoin({'enableRateLimit': True})
-        bars = exchange.fetch_ohlcv(symbol, timeframe='1h', limit=300)
-    df = pd.DataFrame(bars, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
-    return df, symbol
+        df = pd.DataFrame(bars, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
+        return df, symbol
+    except Exception as e:
+        # যদি বিন্যান্সে না পায়, তবে অন্য এক্সচেঞ্জে ট্রাই করবে
+        print(f"Error: {e}")
+        raise Exception("পেয়ারটি খুঁজে পাওয়া যায়নি।")
+
 
 # ৪. সরাসরি ট্রেডিং অ্যাকশন লজিক
 def analyze_market(df):
