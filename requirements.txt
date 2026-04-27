@@ -1,7 +1,6 @@
-ccxt
+pyTelegramBotAPI
+yfinance
 pandas
 ta
-pyTelegramBotAPI
-flask
 pytz
-yfinance
+flask
